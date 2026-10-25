@@ -22,6 +22,6 @@ export const AVATAR_COLORS: readonly string[] = [
   '#EE46BC',
 ];
 
-export const RINGTONE_IDS: readonly RingtoneId[] = ['classic', 'chime', 'system'];
+export const RINGTONE_IDS: readonly RingtoneId[] = ['classic', 'chime', 'system', 'file'];
 
 export const MAX_NAME_LENGTH = 40;

@@ -70,7 +70,8 @@ Design notes:
 - The incoming screen is a React Native screen styled like an incoming call. It is not the system Phone app; it does show over the lock screen, and it never appears in the real call log.
 - Immersive mode hides the status and navigation bars where Android allows; swiping from an edge can reveal them.
 - Android's earpiece routing through expo-audio is not guaranteed on all devices. If you need reliable routing, that is a candidate for a small Kotlin addition.
-- Permissions used: `VIBRATE` (normal permission, granted at install), plus the call-alarm permissions listed above.
+- The ringtone is either a bundled sound, the phone's own ringtone, or any audio file from the device (Settings → Ringtone → **Audio file**). The phone-ringtone picker needs `READ_MEDIA_AUDIO` (Android 13+, requested when you tap it) to read the URI it returns; picking an audio file goes through the system file picker and needs no permission.
+- Permissions used: `VIBRATE` (normal permission, granted at install), `READ_MEDIA_AUDIO` for the ringtone picker, plus the call-alarm permissions listed above.
 - **An answered call is silent.** Nothing is bundled to play during the call; pick an audio file under Settings → Voice clip and it plays automatically once you answer.
 - The app icon and splash image are still the Expo template defaults.
 

@@ -4,6 +4,7 @@ import * as IntentLauncher from 'expo-intent-launcher';
 import { useEffect, useState, type ReactNode } from 'react';
 import {
   Alert,
+  PermissionsAndroid,
   Platform,
   Pressable,
   ScrollView,
@@ -114,8 +115,34 @@ export default function SettingsScreen() {
 
   /* ------------------------- ringtone picker ------------------------- */
 
+  /**
+   * Android only lets the app read the URI the ringtone picker returns once the
+   * audio read permission is granted; without it the copy below fails.
+   */
+  const requestRingtoneReadPermission = async (): Promise<boolean> => {
+    if (Platform.OS !== 'android') return true;
+    const permission =
+      Number(Platform.Version) >= 33
+        ? PermissionsAndroid.PERMISSIONS.READ_MEDIA_AUDIO
+        : PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE;
+    try {
+      const result = await PermissionsAndroid.request(permission);
+      return result === PermissionsAndroid.RESULTS.GRANTED;
+    } catch {
+      return false;
+    }
+  };
+
   const openSystemRingtonePicker = async () => {
     if (Platform.OS === 'android') {
+      const granted = await requestRingtoneReadPermission();
+      if (!granted) {
+        Alert.alert(
+          'Allow audio access',
+          'Android needs permission to read the ringtone you pick. You can also use the Audio file option to pick a ringtone from your phone.',
+        );
+        return;
+      }
       try {
         const result = await IntentLauncher.startActivityAsync(
           'android.intent.action.RINGTONE_PICKER',
@@ -149,7 +176,7 @@ export default function SettingsScreen() {
         } catch {
           Alert.alert(
             'Could not use that ringtone',
-            'Your phone did not share the ringtone file. Try a different ringtone, or pick one of the built-in rings below.',
+            'Your phone did not share the ringtone file. Grant audio access, or use the Audio file option to pick a ringtone from your phone.',
           );
           return;
         }
@@ -173,6 +200,30 @@ export default function SettingsScreen() {
   const chooseBuiltIn = (id: BuiltInRingtoneId) => {
     updateCaller({ ringtone: id });
     startRingtone(id, { loop: false });
+  };
+
+  /** Uses any audio file on the phone as the ringtone, with no media permission. */
+  const pickRingtoneFile = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'audio/*',
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      const asset = result.assets[0];
+      // Keep our own copy so the ringtone survives cache cleanups.
+      let uri = asset.uri;
+      try {
+        uri = await persistAudioFile(asset.uri, 'ringtone');
+      } catch {
+        // Keep the picker's cache copy.
+      }
+      updateCaller({ ringtone: 'file', ringtoneUri: uri });
+      startRingtone('file', { systemUri: uri, loop: false });
+    } catch {
+      Alert.alert('Could not open file picker', 'Please try again.');
+    }
   };
 
   /* ----------------------- audio clip picker ------------------------ */
@@ -231,8 +282,10 @@ export default function SettingsScreen() {
     ]);
   };
 
-  const selectedSystemRingtone =
+  const selectedPhoneRingtone =
     caller.ringtone === 'system' && caller.ringtoneUri ? caller.ringtoneUri : null;
+  const selectedFileRingtone =
+    caller.ringtone === 'file' && caller.ringtoneUri ? caller.ringtoneUri : null;
 
   const hasClip = Boolean(caller.voiceClipUri);
 
@@ -304,22 +357,48 @@ export default function SettingsScreen() {
           accessibilityRole="radio"
           accessibilityLabel="Phone ringtone"
           accessibilityHint="Opens your phone's ringtone picker"
-          accessibilityState={{ selected: selectedSystemRingtone !== null }}
+          accessibilityState={{ selected: selectedPhoneRingtone !== null }}
           android_ripple={{ color: palette.surfaceAlt }}
           style={styles.row}
         >
           <View style={styles.rowTextBlock}>
             <Text style={[styles.rowText, { color: palette.text }]}>Phone ringtone</Text>
             <Text style={[styles.rowSub, { color: palette.textMuted }]} numberOfLines={1}>
-              {selectedSystemRingtone
-                ? 'Selected — plays when the phone rings'
+              {selectedPhoneRingtone
+                ? 'Selected — plays when the call comes in'
                 : 'Use the ringtone from your device settings'}
             </Text>
           </View>
           <MaterialCommunityIcons
-            name={selectedSystemRingtone ? 'check' : 'chevron-right'}
+            name={selectedPhoneRingtone ? 'check' : 'chevron-right'}
             size={22}
-            color={selectedSystemRingtone ? palette.accent : palette.textMuted}
+            color={selectedPhoneRingtone ? palette.accent : palette.textMuted}
+          />
+        </Pressable>
+
+        <Divider palette={palette} />
+
+        <Pressable
+          onPress={pickRingtoneFile}
+          accessibilityRole="radio"
+          accessibilityLabel="Audio file"
+          accessibilityHint="Pick an audio file from your phone to use as the ringtone"
+          accessibilityState={{ selected: selectedFileRingtone !== null }}
+          android_ripple={{ color: palette.surfaceAlt }}
+          style={styles.row}
+        >
+          <View style={styles.rowTextBlock}>
+            <Text style={[styles.rowText, { color: palette.text }]}>Audio file</Text>
+            <Text style={[styles.rowSub, { color: palette.textMuted }]} numberOfLines={1}>
+              {selectedFileRingtone
+                ? 'Selected — plays when the call comes in'
+                : 'Pick your own audio file from this phone'}
+            </Text>
+          </View>
+          <MaterialCommunityIcons
+            name={selectedFileRingtone ? 'check' : 'chevron-right'}
+            size={22}
+            color={selectedFileRingtone ? palette.accent : palette.textMuted}
           />
         </Pressable>
 

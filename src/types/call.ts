@@ -1,9 +1,12 @@
 /**
  * - `classic` / `chime`: bundled sounds.
- * - `system`: the phone's own ringtone, chosen with the system ringtone picker
- *   (its content URI is kept in `CallerProfile.ringtoneUri`).
+ * - `system`: the phone's own ringtone, chosen with the system ringtone picker.
+ * - `file`: an audio file picked from the device.
+ *
+ * Both `system` and `file` keep a copy of the chosen sound in app storage and
+ * play it from `CallerProfile.ringtoneUri`.
  */
-export type RingtoneId = 'classic' | 'chime' | 'system';
+export type RingtoneId = 'classic' | 'chime' | 'system' | 'file';
 
 /** Bundled avatars are a colour plus the caller's initials. */
 export type AvatarColor = string;

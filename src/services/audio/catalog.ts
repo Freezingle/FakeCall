@@ -7,8 +7,8 @@ import type { CallerProfile, RingtoneId } from '@/types/call';
 // To add a ringtone: drop a file in assets/audio, add its id to BuiltInRingtoneId
 // (this file) and RINGTONE_IDS (features/settings/defaults.ts), then add it below.
 
-/** Ringtones shipped with the app. The 'system' ringtone has no bundled file. */
-export type BuiltInRingtoneId = Exclude<RingtoneId, 'system'>;
+/** Ringtones shipped with the app. 'system' and 'file' play a stored copy instead. */
+export type BuiltInRingtoneId = Exclude<RingtoneId, 'system' | 'file'>;
 
 export const RINGTONES: Record<BuiltInRingtoneId, { label: string; source: number }> = {
   classic: {
@@ -45,21 +45,22 @@ export async function persistAudioFile(
 
 /**
  * Resolves what to actually play for the caller's ringtone. Only local files
- * play reliably: read grants on raw `content://` URIs from the ringtone picker
- * expire, so those (and a missing URI) fall back to the classic bundled ring.
+ * play reliably: read grants on raw `content://` URIs expire, so those (and a
+ * missing URI) fall back to the classic bundled ring.
  */
 export function resolveRingtoneSource(
   ringtone: RingtoneId,
   ringtoneUri: string | null,
 ): AudioSource {
-  if (ringtone !== 'system') return RINGTONES[ringtone].source;
+  if (ringtone === 'classic' || ringtone === 'chime') return RINGTONES[ringtone].source;
   if (ringtoneUri?.startsWith('file://')) return { uri: ringtoneUri };
   return RINGTONES.classic.source;
 }
 
-/** Display name for any ringtone, including the phone's own. */
+/** Display name for any ringtone, including the phone's own and picked files. */
 export function ringtoneLabel(ringtone: RingtoneId, ringtoneUri: string | null): string {
-  if (ringtone !== 'system') return RINGTONES[ringtone].label;
+  if (ringtone === 'classic' || ringtone === 'chime') return RINGTONES[ringtone].label;
+  if (ringtone === 'file') return ringtoneUri ? 'Your audio file' : 'Your audio file (not set)';
   return ringtoneUri ? 'Phone ringtone' : 'Phone ringtone (not set)';
 }
 

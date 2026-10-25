@@ -55,6 +55,14 @@ describe('parseSettings', () => {
     });
   });
 
+  it('keeps a ringtone picked from an audio file', () => {
+    const result = parseSettings({
+      caller: { ringtone: 'file', ringtoneUri: 'file:///data/ring.mp3' },
+    });
+    expect(result.caller.ringtone).toBe('file');
+    expect(result.caller.ringtoneUri).toBe('file:///data/ring.mp3');
+  });
+
   it('drops non-string or empty URIs', () => {
     const result = parseSettings({
       caller: { ringtoneUri: 42, voiceClipUri: '', voiceClipName: false },
