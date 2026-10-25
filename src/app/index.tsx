@@ -1,5 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   AccessibilityInfo,
@@ -17,6 +17,13 @@ import { useSettings } from '@/features/settings/SettingsProvider';
 import { ringtoneLabel } from '@/services/audio/catalog';
 import { tapFeedback } from '@/services/feedback/feedback';
 import {
+  callAlarmAvailable,
+  getAlarmPermissions,
+  openAlarmSettings,
+  requestNotificationPermission,
+  type AlarmPermissions,
+} from '@/services/scheduling/callAlarm';
+import {
   DEFAULT_DELAY_ID,
   DELAY_PRESETS,
   formatCountdown,
@@ -30,11 +37,13 @@ function ScheduleStatus({
   fireAt,
   callerName,
   palette,
+  alarmSupported,
   onCancel,
 }: {
   fireAt: number;
   callerName: string;
   palette: Palette;
+  alarmSupported: boolean;
   onCancel: () => void;
 }) {
   const now = useNow(250);
@@ -60,7 +69,9 @@ function ScheduleStatus({
         <Text style={[styles.outlineButtonText, { color: palette.danger }]}>Cancel call</Text>
       </Pressable>
       <Text style={[styles.hint, { color: palette.textMuted }]}>
-        Keep FakeCall open. The call rings while the app is on screen.
+        {alarmSupported
+          ? 'Rings even if FakeCall is closed. Keep the phone switched on.'
+          : 'Only rings while FakeCall is open: this build has no native call alarm.'}
       </Text>
     </View>
   );
@@ -75,6 +86,7 @@ export default function HomeScreen() {
 
   const [delayId, setDelayId] = useState(DEFAULT_DELAY_ID);
   const [notice, setNotice] = useState<string | null>(null);
+  const [alarmPermissions, setAlarmPermissions] = useState<AlarmPermissions | null>(null);
 
   const { caller } = settings;
   const selectedDelay = DELAY_PRESETS.find((p) => p.id === delayId) ?? DELAY_PRESETS[1];
@@ -90,6 +102,45 @@ export default function HomeScreen() {
     setNotice(message);
     AccessibilityInfo.announceForAccessibility(message);
   }, []);
+
+  const refreshAlarmPermissions = useCallback(() => {
+    getAlarmPermissions()
+      .then(setAlarmPermissions)
+      .catch(() => undefined);
+  }, []);
+
+  // Re-read on focus: the user may have just granted a permission in settings.
+  useFocusEffect(
+    useCallback(() => {
+      refreshAlarmPermissions();
+    }, [refreshAlarmPermissions]),
+  );
+
+  // Missing permissions, in the order worth fixing them.
+  const missingPermissions: { key: keyof AlarmPermissions; label: string }[] = alarmPermissions
+    ? [
+        { key: 'notifications' as const, label: 'notifications' },
+        { key: 'exactAlarms' as const, label: 'exact alarms' },
+        { key: 'fullScreenIntent' as const, label: 'full-screen alerts' },
+      ].filter(({ key }) => !alarmPermissions[key])
+    : [];
+
+  const handleFixPermissions = async () => {
+    tapFeedback();
+    if (!alarmPermissions) return;
+    if (!alarmPermissions.notifications) {
+      // The only one Android can ask for directly; the rest need the user.
+      const granted = await requestNotificationPermission();
+      if (!granted) await openAlarmSettings('notifications');
+      refreshAlarmPermissions();
+      return;
+    }
+    if (!alarmPermissions.exactAlarms) {
+      await openAlarmSettings('exactAlarms');
+      return;
+    }
+    await openAlarmSettings('fullScreenIntent');
+  };
 
   const handleSchedule = () => {
     tapFeedback();
@@ -177,6 +228,7 @@ export default function HomeScreen() {
             fireAt={schedule.fireAt}
             callerName={caller.name}
             palette={palette}
+            alarmSupported={callAlarmAvailable}
             onCancel={handleCancel}
           />
         ) : (
@@ -238,6 +290,32 @@ export default function HomeScreen() {
             <Text style={[styles.notice, { color: palette.success }]}>{notice}</Text>
           )}
         </View>
+
+        {missingPermissions.length > 0 && (
+          <Pressable
+            onPress={handleFixPermissions}
+            accessibilityRole="button"
+            accessibilityLabel={`Allow ${missingPermissions
+              .map((permission) => permission.label)
+              .join(', ')} so scheduled calls can reach you`}
+            android_ripple={{ color: palette.surfaceAlt }}
+            style={[
+              styles.permissionCard,
+              { backgroundColor: palette.surface, borderColor: palette.border },
+            ]}
+          >
+            <MaterialCommunityIcons name="bell-alert-outline" size={22} color={palette.text} />
+            <View style={styles.permissionText}>
+              <Text style={[styles.permissionTitle, { color: palette.text }]}>
+                Allow {missingPermissions.map((permission) => permission.label).join(', ')}
+              </Text>
+              <Text style={[styles.permissionHint, { color: palette.textMuted }]}>
+                Without this, a scheduled call cannot reach you while FakeCall is closed.
+              </Text>
+            </View>
+            <Text style={[styles.permissionAction, { color: palette.accent }]}>Allow</Text>
+          </Pressable>
+        )}
       </View>
 
       <Text style={[styles.footnote, { color: palette.textMuted }]}>
@@ -328,5 +406,18 @@ const styles = StyleSheet.create({
   hint: { fontSize: 12, textAlign: 'center', marginTop: space.xs },
   noticeSlot: { minHeight: 22 },
   notice: { fontSize: 15, fontWeight: '600', textAlign: 'center' },
+  permissionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    padding: space.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  permissionText: { flex: 1, gap: 2 },
+  permissionTitle: { fontSize: 15, fontWeight: '600' },
+  permissionHint: { fontSize: 12, lineHeight: 16 },
+  permissionAction: { fontSize: 15, fontWeight: '700' },
   footnote: { fontSize: 12, lineHeight: 17, textAlign: 'center', marginTop: 'auto' },
 });

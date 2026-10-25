@@ -43,11 +43,13 @@ src/
   features/settings/      Defaults and SettingsProvider
   services/audio/         callAudio (the only place players are created/released) + bundled audio catalog
   services/feedback/      Ring vibration (core Vibration) and button haptics (expo-haptics)
-  services/scheduling/    Delay presets, time formatting, useNow ticker
+  services/scheduling/    Delay presets, time formatting, useNow ticker, OS alarm bridge
   storage/                AsyncStorage persistence with defensive parsing
   theme/                  Palettes and spacing
   types/                  Shared types
 assets/audio/             Two ringtones (generated locally)
+modules/fakecall-alarm/   Local Expo module: AlarmManager alarm + full-screen-intent notification
+plugins/                  Config plugin that lets the call screen show over the lock screen
 ```
 
 Design notes:
@@ -57,15 +59,18 @@ Design notes:
 - **Audio cleanup is tied to the phase.** Effects in `CallProvider` start ringtone/vibration on `ringing` and the user's picked clip on `active`; their cleanup functions stop everything whenever the phase changes or the provider unmounts.
 - **Mute and Speaker are simulation controls.** Mute shows a muted state (the app has no microphone access). Speaker raises the voice clip volume and requests earpiece vs speaker routing as a best effort.
 
-## Android behaviour and limitations (Stage 1)
+## Android behaviour and limitations
 
-- Calls are simulated **while the app is open**. A scheduled call that comes due while the app is backgrounded rings when you return to the app.
+- **A scheduled call arrives even when the app is closed.** `scheduleCall()` hands the deadline to `AlarmManager` through the `modules/fakecall-alarm` module, so the OS fires it with no React Native process alive. The alarm posts a `CATEGORY_CALL` notification carrying a full-screen intent, which brings the app up over the lock screen and the call rings as usual.
+- The alarm survives the app being swiped away and the phone being rebooted (`BOOT_COMPLETED` re-arms a call that is still in the future). It cannot survive the phone being **powered off** — nothing can wake a powered-off Android device — and a deadline that passes while it is off is discarded on boot.
+- Three OS permissions decide whether the call reaches you, and the home screen offers a one-tap fix for each: notifications (Android 13+), exact alarms (Android 12+), and full-screen intents (Android 14+). Without the full-screen permission the call arrives as a tappable heads-up notification instead of a full-screen call.
+- If the app is opened within 60 seconds of a missed alarm it rings then; after that the call is treated as missed. Tapping the notification always opens the call.
 - If the app goes to the background while ringing, the ring is stopped and the call ends as missed. A call screen you cannot see should not keep making noise.
 - The ringtone follows the phone's ringer mode (silent/vibrate suppress it), like a real call. Vibration is a separate setting.
-- The incoming screen is a React Native screen styled like an incoming call. It is not the system Phone app, and it does not appear over the lock screen or other apps. Notifications and full-screen intents are Stage 2.
+- The incoming screen is a React Native screen styled like an incoming call. It is not the system Phone app; it does show over the lock screen, and it never appears in the real call log.
 - Immersive mode hides the status and navigation bars where Android allows; swiping from an edge can reveal them.
-- Android's earpiece routing through expo-audio is not guaranteed on all devices. If you need reliable routing, that is a candidate for a small Kotlin module in Stage 3.
-- Permissions used: `VIBRATE` (normal permission, granted at install). No runtime permission prompts in Stage 1.
+- Android's earpiece routing through expo-audio is not guaranteed on all devices. If you need reliable routing, that is a candidate for a small Kotlin addition.
+- Permissions used: `VIBRATE` (normal permission, granted at install), plus the call-alarm permissions listed above.
 - **An answered call is silent.** Nothing is bundled to play during the call; pick an audio file under Settings → Voice clip and it plays automatically once you answer.
 - The app icon and splash image are still the Expo template defaults.
 
@@ -78,6 +83,9 @@ Design notes:
 5. **Speaker** toggles louder/quieter. **Mute** toggles its highlighted state. After picking a clip in Settings, **Pause clip / Play clip** appears on the active screen, the clip plays on answer, and Play restarts it after it finishes.
 6. **End call**: audio stops, you return to home. Trigger another call; mute and speaker are reset.
 7. **Schedule**: pick 10 sec, tap Schedule. The countdown shows, the "Call scheduled in 10 seconds" message appears, and the call rings at zero.
+7a. **Closed app**: schedule 30 sec, swipe FakeCall away, lock the phone. The call screen appears over the lock screen at the deadline.
+7b. **Locked screen**: schedule 30 sec and lock the phone immediately. Same result, with the screen waking up.
+7c. **Reboot**: schedule 5 min, restart the phone, unlock it once, wait. The call still rings.
 8. **Cancel**: schedule 1 min, tap Cancel. "Scheduled call cancelled" appears and nothing rings.
 9. Schedule 10 sec, tap **Call Me Now** before it fires: exactly one call, and no second ring when the 10 seconds elapse.
 10. Let a call ring without answering: it stops by itself after about 45 seconds.

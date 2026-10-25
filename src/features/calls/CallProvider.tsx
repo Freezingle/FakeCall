@@ -20,6 +20,14 @@ import {
   stopRingVibration,
   tapFeedback,
 } from '@/services/feedback/feedback';
+import { isAlarmStillPending, shouldRingOnLaunch } from '@/services/scheduling/alarmWindow';
+import {
+  acknowledgeAlarmFired,
+  cancelAlarm,
+  dismissCallNotification,
+  getPendingAlarm,
+  scheduleAlarm,
+} from '@/services/scheduling/callAlarm';
 
 import { callReducer, initialCallState, type CallState } from './callReducer';
 
@@ -29,7 +37,10 @@ const RING_TIMEOUT_MS = 45_000;
 interface CallContextValue extends CallState {
   /** Ring immediately. Replaces any pending scheduled call. */
   callNow: () => void;
-  /** Ring after `delayMs`, while the app is open. No-op if a call is already in progress. */
+  /**
+   * Ring after `delayMs`, even with the app closed or the phone locked.
+   * No-op if a call is already in progress.
+   */
   scheduleCall: (delayMs: number) => void;
   cancelScheduledCall: () => void;
   answer: () => void;
@@ -42,7 +53,7 @@ interface CallContextValue extends CallState {
 const CallContext = createContext<CallContextValue | null>(null);
 
 export function CallProvider({ children }: { children: ReactNode }) {
-  const { settings } = useSettings();
+  const { settings, status } = useSettings();
   const [state, dispatch] = useReducer(callReducer, initialCallState);
   const { phase, schedule, caller, vibrate, speakerOn } = state;
 
@@ -57,7 +68,53 @@ export function CallProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'ring', caller: current.caller, vibrate: current.vibrate });
   }, []);
 
-  // --- Scheduled call: fires while the app is open. -------------------------
+  // --- Scheduled call: the OS alarm is what survives the app being killed. --
+  // On launch it may already have fired while no JS was running, so the native
+  // record decides whether to ring now or restore the countdown. Waits for the
+  // saved settings so the call rings with the caller the user chose, not the
+  // defaults that exist before storage is read.
+  useEffect(() => {
+    if (status !== 'ready') return;
+    let cancelled = false;
+    getPendingAlarm()
+      .then((pending) => {
+        if (cancelled || pending === null) return;
+        const now = Date.now();
+        if (shouldRingOnLaunch(pending, now)) {
+          ring();
+        } else if (isAlarmStillPending(pending, now)) {
+          dispatch({
+            type: 'schedule',
+            call: { fireAt: pending.fireAt, delayMs: pending.fireAt - now },
+          });
+        } else {
+          // The deadline passed long ago: that call is gone.
+          void cancelAlarm();
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [status, ring]);
+
+  // The system notification only exists to wake the app up. Once the in-app call
+  // screen owns the ring, it goes away; and when the call ends nothing of it is
+  // left behind to fire again on the next launch.
+  const hadSystemCall = useRef(false);
+  useEffect(() => {
+    if (phase === 'ringing') {
+      hadSystemCall.current = true;
+      void dismissCallNotification();
+      void acknowledgeAlarmFired();
+    } else if (phase === 'idle' && hadSystemCall.current) {
+      hadSystemCall.current = false;
+      void dismissCallNotification();
+      void cancelAlarm();
+    }
+  }, [phase]);
+
+  // --- In-app countdown, for precision while the app is running. ------------
   // JS timers are unreliable once Android suspends the app, so if the deadline
   // passes while backgrounded we ring as soon as the app returns to the foreground.
   useEffect(() => {
@@ -121,15 +178,25 @@ export function CallProvider({ children }: { children: ReactNode }) {
   );
 
   const callNow = useCallback(() => {
+    // A scheduled call is superseded, including the alarm the OS holds for it.
+    void cancelAlarm();
     dispatch({ type: 'cancelSchedule' });
     ring();
   }, [ring]);
 
   const scheduleCall = useCallback((delayMs: number) => {
-    dispatch({ type: 'schedule', call: { fireAt: Date.now() + delayMs, delayMs } });
+    const fireAt = Date.now() + delayMs;
+    dispatch({ type: 'schedule', call: { fireAt, delayMs } });
+    // Handing the deadline to Android is what makes it arrive with the app
+    // closed, the screen off or the phone locked.
+    const { name, label } = settingsRef.current.caller;
+    void scheduleAlarm(fireAt, name, label);
   }, []);
 
-  const cancelScheduledCall = useCallback(() => dispatch({ type: 'cancelSchedule' }), []);
+  const cancelScheduledCall = useCallback(() => {
+    void cancelAlarm();
+    dispatch({ type: 'cancelSchedule' });
+  }, []);
 
   const answer = useCallback(() => {
     confirmFeedback();
