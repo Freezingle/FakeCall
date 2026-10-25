@@ -1,4 +1,4 @@
-import type { AppSettings, RingtoneId, VoiceClipId } from '@/types/call';
+import type { AppSettings, RingtoneId } from '@/types/call';
 
 export const DEFAULT_SETTINGS: AppSettings = {
   caller: {
@@ -7,7 +7,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
     avatarColor: '#7C5CFF',
     ringtone: 'classic',
     ringtoneUri: null,
-    voiceClip: 'greeting',
     voiceClipUri: null,
     voiceClipName: null,
   },
@@ -24,6 +23,5 @@ export const AVATAR_COLORS: readonly string[] = [
 ];
 
 export const RINGTONE_IDS: readonly RingtoneId[] = ['classic', 'chime', 'system'];
-export const VOICE_CLIP_IDS: readonly VoiceClipId[] = ['greeting'];
 
 export const MAX_NAME_LENGTH = 40;

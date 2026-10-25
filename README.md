@@ -47,14 +47,14 @@ src/
   storage/                AsyncStorage persistence with defensive parsing
   theme/                  Palettes and spacing
   types/                  Shared types
-assets/audio/             Two ringtones and one voice clip (generated locally)
+assets/audio/             Two ringtones (generated locally)
 ```
 
 Design notes:
 
 - **One state machine.** `callReducer` defines every legal transition (`idle -> ringing -> active -> idle`). Illegal ones are no-ops, which is what prevents duplicate triggers.
 - **Screens never navigate for call transitions.** `CallNavigator` watches the phase and navigates. Screens only call `answer()` / `hangUp()`.
-- **Audio cleanup is tied to the phase.** Effects in `CallProvider` start ringtone/vibration on `ringing` and voice clip on `active`; their cleanup functions stop everything whenever the phase changes or the provider unmounts.
+- **Audio cleanup is tied to the phase.** Effects in `CallProvider` start ringtone/vibration on `ringing` and the user's picked clip on `active`; their cleanup functions stop everything whenever the phase changes or the provider unmounts.
 - **Mute and Speaker are simulation controls.** Mute shows a muted state (the app has no microphone access). Speaker raises the voice clip volume and requests earpiece vs speaker routing as a best effort.
 
 ## Android behaviour and limitations (Stage 1)
@@ -66,7 +66,7 @@ Design notes:
 - Immersive mode hides the status and navigation bars where Android allows; swiping from an edge can reveal them.
 - Android's earpiece routing through expo-audio is not guaranteed on all devices. If you need reliable routing, that is a candidate for a small Kotlin module in Stage 3.
 - Permissions used: `VIBRATE` (normal permission, granted at install). No runtime permission prompts in Stage 1.
-- The voice clip is synthesized speech, a stand-in. Replace `assets/audio/voice-greeting.wav` with your own recording (keep the filename, or update `src/services/audio/catalog.ts`).
+- **An answered call is silent.** Nothing is bundled to play during the call; pick an audio file under Settings → Voice clip and it plays automatically once you answer.
 - The app icon and splash image are still the Expo template defaults.
 
 ## MVP verification checklist
@@ -74,8 +74,8 @@ Design notes:
 1. App opens to the home screen with caller "Mom", **Call Me Now**, four delay chips, and **Schedule Fake Call**.
 2. **Call Me Now**: the incoming screen appears full-screen and dark, the ringtone plays and the phone vibrates (if not in silent mode).
 3. **Decline**: sound and vibration stop immediately and you land on home. Android Back does nothing on the call screen.
-4. **Call Me Now, then Answer**: ringing stops, the timer counts up, and the voice clip plays.
-5. **Speaker** toggles louder/quieter. **Mute** toggles its highlighted state. **Pause clip / Play clip** works, and Play restarts the clip after it finishes.
+4. **Call Me Now, then Answer**: ringing stops, the timer counts up, and no audio plays (no clip is picked).
+5. **Speaker** toggles louder/quieter. **Mute** toggles its highlighted state. After picking a clip in Settings, **Pause clip / Play clip** appears on the active screen, the clip plays on answer, and Play restarts it after it finishes.
 6. **End call**: audio stops, you return to home. Trigger another call; mute and speaker are reset.
 7. **Schedule**: pick 10 sec, tap Schedule. The countdown shows, the "Call scheduled in 10 seconds" message appears, and the call rings at zero.
 8. **Cancel**: schedule 1 min, tap Cancel. "Scheduled call cancelled" appears and nothing rings.

@@ -22,7 +22,6 @@ describe('parseSettings', () => {
         label: 'work',
         avatarColor: '#12B76A',
         ringtone: 'chime',
-        voiceClip: null,
       },
       vibrate: false,
     };
@@ -67,7 +66,7 @@ describe('parseSettings', () => {
 
   it('replaces invalid fields individually instead of discarding everything', () => {
     const result = parseSettings({
-      caller: { name: '   ', ringtone: 'not-a-ringtone', avatarColor: 'red', voiceClip: 'nope' },
+      caller: { name: '   ', ringtone: 'not-a-ringtone', avatarColor: 'red' },
       vibrate: 'yes',
     });
     expect(result).toEqual(DEFAULT_SETTINGS);

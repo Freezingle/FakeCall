@@ -1,7 +1,7 @@
 import { File, Paths } from 'expo-file-system';
 import type { AudioSource } from 'expo-audio';
 
-import type { CallerProfile, RingtoneId, VoiceClipId } from '@/types/call';
+import type { CallerProfile, RingtoneId } from '@/types/call';
 
 // Metro needs static require() calls, so bundled audio is registered here.
 // To add a ringtone: drop a file in assets/audio, add its id to BuiltInRingtoneId
@@ -20,13 +20,6 @@ export const RINGTONES: Record<BuiltInRingtoneId, { label: string; source: numbe
     source: require('../../../assets/audio/ringtone-chime.wav'),
   },
   
-};
-
-export const VOICE_CLIPS: Record<VoiceClipId, { label: string; source: number }> = {
-  greeting: {
-    label: 'Greeting (synthesized voice)',
-    source: require('../../../assets/audio/voice-greeting.wav'),
-  },
 };
 
 /**
@@ -71,11 +64,10 @@ export function ringtoneLabel(ringtone: RingtoneId, ringtoneUri: string | null):
 }
 
 /**
- * The audio to play automatically while the call is active: a clip picked from
- * the device wins over the bundled one; null means silence.
+ * The audio to play automatically while the call is active: only a clip the
+ * user picked themselves. No clip is bundled, so an answered call is silent
+ * until they add one.
  */
 export function resolveVoiceClipSource(caller: CallerProfile): AudioSource | null {
-  if (caller.voiceClipUri) return { uri: caller.voiceClipUri };
-  if (caller.voiceClip) return VOICE_CLIPS[caller.voiceClip].source;
-  return null;
+  return caller.voiceClipUri ? { uri: caller.voiceClipUri } : null;
 }

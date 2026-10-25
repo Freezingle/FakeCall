@@ -5,8 +5,6 @@
  */
 export type RingtoneId = 'classic' | 'chime' | 'system';
 
-export type VoiceClipId = 'greeting';
-
 /** Bundled avatars are a colour plus the caller's initials. */
 export type AvatarColor = string;
 
@@ -18,9 +16,7 @@ export interface CallerProfile {
   ringtone: RingtoneId;
   /** Content URI picked from the phone's ringtone picker; used when `ringtone` is 'system'. */
   ringtoneUri: string | null;
-  /** Bundled clip that plays automatically after answering, or null for silence. */
-  voiceClip: VoiceClipId | null;
-  /** Audio file picked from the device; auto-plays during the call (wins over `voiceClip`). */
+  /** Audio file picked from the device; auto-plays during the call. Null means silence. */
   voiceClipUri: string | null;
   /** Display name of the picked file, for the settings UI. */
   voiceClipName: string | null;

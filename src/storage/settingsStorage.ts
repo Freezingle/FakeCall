@@ -5,9 +5,8 @@ import {
   DEFAULT_SETTINGS,
   MAX_NAME_LENGTH,
   RINGTONE_IDS,
-  VOICE_CLIP_IDS,
 } from '@/features/settings/defaults';
-import type { AppSettings, RingtoneId, VoiceClipId } from '@/types/call';
+import type { AppSettings, RingtoneId } from '@/types/call';
 
 // Bump the suffix if the stored shape changes incompatibly.
 const STORAGE_KEY = 'fakecall.settings.v1';
@@ -33,11 +32,6 @@ export function parseSettings(raw: unknown): AppSettings {
   const caller = isRecord(raw.caller) ? raw.caller : {};
 
   const ringtone = RINGTONE_IDS.find((id): id is RingtoneId => id === caller.ringtone);
-  const voiceClip: VoiceClipId | null =
-    caller.voiceClip === null
-      ? null
-      : (VOICE_CLIP_IDS.find((id): id is VoiceClipId => id === caller.voiceClip) ??
-        defaults.caller.voiceClip);
 
   // URIs come from the system picker / document picker; accept any non-empty string.
   const uri = (value: unknown): string | null =>
@@ -53,7 +47,6 @@ export function parseSettings(raw: unknown): AppSettings {
           : defaults.caller.avatarColor,
       ringtone: ringtone ?? defaults.caller.ringtone,
       ringtoneUri: uri(caller.ringtoneUri),
-      voiceClip,
       voiceClipUri: uri(caller.voiceClipUri),
       voiceClipName:
         typeof caller.voiceClipName === 'string' && caller.voiceClipName.length > 0
